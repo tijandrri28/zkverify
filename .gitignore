@@ -1,0 +1,15 @@
+# Dependencies
+node_modules/
+
+# Secrets — never commit
+.env
+.env.local
+.env.*.local
+
+# Runtime state (PROOF_REUSED seen-set, logs)
+data/
+*.log
+
+# OS / editor
+.DS_Store
+Thumbs.db
