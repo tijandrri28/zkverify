@@ -58,7 +58,12 @@ export function hmacSecretBytes() {
       "AGENT_GAMES_HMAC_SECRET must be 32 bytes as 64 hex chars (0x prefix optional).",
     );
   }
-  return Buffer.from(hex, "hex");
+  // CRITICAL: the platform uses the secret STRING as the HMAC key (UTF-8
+  // bytes of the 64 hex chars), NOT the hex-decoded 32 bytes. The reference
+  // implementation (subastian1998/agent-games-season-01, shared/hmac.js)
+  // passes the secret straight to createHmac, and hex-decoding it here made
+  // every platform signature fail verification with 401.
+  return Buffer.from(hex, "utf8");
 }
 
 // Fail fast at import time if the config is unusable.
