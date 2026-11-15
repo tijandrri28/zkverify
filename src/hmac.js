@@ -16,9 +16,13 @@ export function signBody(secretBytes, rawBody) {
 
 export function verifySignature(secretBytes, rawBody, signature) {
   if (typeof signature !== "string" || signature.length === 0) return false;
+  // Accept both plain hex and the "sha256=<hex>" form — the platform's
+  // preflight has been seen sending the prefixed form, which a strict
+  // hex comparison rejects (length mismatch) with a 401.
+  const cleaned = signature.trim().replace(/^sha256=/i, "").toLowerCase();
   const expected = signBody(secretBytes, rawBody);
   const a = Buffer.from(expected, "utf8");
-  const b = Buffer.from(signature.trim().toLowerCase(), "utf8");
+  const b = Buffer.from(cleaned, "utf8");
   if (a.length !== b.length) return false;
   return crypto.timingSafeEqual(a, b);
 }

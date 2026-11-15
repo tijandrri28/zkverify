@@ -73,6 +73,15 @@ async function handlePost(req, res, path) {
     return sendSigned(res, 400, { error: "invalid JSON" });
   }
 
+  // Preflight: the platform sends {"type":"agent-games.preflight.v1"} when
+  // an endpoint is saved and expects {ok:true, protocolVersion:"v1"} back,
+  // signed. Without this the preflight falls through to "unknown task type".
+  const envelopeType = String(envelope?.type ?? envelope?.task_type ?? "");
+  if (envelopeType === "agent-games.preflight.v1" || envelopeType === "preflight") {
+    log("info", "preflight answered", { path });
+    return sendSigned(res, 200, { ok: true, protocolVersion: "v1" });
+  }
+
   // Dispatch: explicit path wins, otherwise the envelope type decides.
   const wantGatekeeper =
     path === "/gatekeeper" || (path === "/" && isGatekeeper(envelope));
