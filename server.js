@@ -23,11 +23,15 @@ import { handleStealTurn } from "./src/steal.js";
 import {
   kurierEnabled,
   ensureVkRegistered,
-  getRegisteredVkHash,
   submitProofFireAndForget,
 } from "./src/kurier.js";
 
 const SECRET = hmacSecretBytes();
+
+// Gatekeeper verification key (loaded at startup from
+// circuits/gatekeeper_vk.json); passed to the Kurier submit path so a
+// failed startup registration can be retried per task. Null until loaded.
+let gatekeeperVk = null;
 
 function log(level, msg, extra) {
   const line = { t: new Date().toISOString(), level, msg, ...(extra ?? {}) };
@@ -109,9 +113,10 @@ async function handlePost(req, res, path) {
       // Kurier (optional audit trail): fire-and-forget AFTER the response
       // is sent, never awaited, never mutating the response. If Kurier
       // is down, slow, or unregistered, nothing here changes the answer
-      // the platform already received.
-      if (result.proof && getRegisteredVkHash()) {
-        submitProofFireAndForget(getRegisteredVkHash(), result.proof, result.public_signals);
+      // the platform already received. submitProofFireAndForget retries
+      // vk registration in the background if startup registration failed.
+      if (result.proof) {
+        submitProofFireAndForget(gatekeeperVk, result.proof, result.public_signals);
       }
       return;
     } catch (e) {
@@ -196,6 +201,7 @@ server.listen(config.port, config.host, () => {
   if (kurierEnabled()) {
     try {
       const vk = JSON.parse(fs.readFileSync("circuits/gatekeeper_vk.json", "utf8"));
+      gatekeeperVk = vk;
       ensureVkRegistered(vk);
     } catch (e) {
       log("error", "kurier startup registration skipped", { error: String(e.message || e) });

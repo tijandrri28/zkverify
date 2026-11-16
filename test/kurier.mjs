@@ -33,7 +33,7 @@ function check(name, ok, detail = "") {
 
 // ---- mock Kurier server (real endpoint shapes) ---------------------------
 const seen = [];
-let mockMode = "ok"; // ok | unauthorized | slow
+let mockMode = "ok"; // ok | unauthorized | slow | slow10
 let statusCalls = 0;
 
 function mockHandler(req, res) {
@@ -54,7 +54,8 @@ function mockHandler(req, res) {
       return send(200, { vkHash: "0x" + "ab".repeat(32) });
     }
     if (req.method === "POST" && req.url.startsWith("/api/v1/submit-proof/")) {
-      if (mockMode === "slow") return setTimeout(() => send(200, { jobId: "job-test-1", optimisticVerify: true }), 10000);
+      if (mockMode === "slow") return setTimeout(() => send(200, { jobId: "job-test-1", optimisticVerify: true }), 35000);
+      if (mockMode === "slow10") return setTimeout(() => send(200, { jobId: "job-test-1", optimisticVerify: true }), 10000);
       return send(200, { jobId: "job-test-1", optimisticVerify: true });
     }
     if (req.method === "GET" && req.url.startsWith("/api/v1/job-status/")) {
@@ -200,12 +201,21 @@ try {
     check("mock 401 -> null, no throw", unauth === null);
     mockMode = "ok";
 
-    // 5. A slow Kurier (10s) hits the 5s timeout and returns null.
+    // 5. A slow Kurier (35s) hits the 30s timeout and returns null.
+    // (Kurier's real API takes ~19s even to reject, so the timeout
+    // is 30s; a 10s delay now succeeds — see test 5b below.)
     mockMode = "slow";
     const t0 = Date.now();
     const slow = await kurier.submitProof(vkHash, { pi_a: ["1"] }, ["1"]);
     const slowMs = Date.now() - t0;
-    check("mock slow (10s) -> null via 5s timeout", slow === null && slowMs >= 4000 && slowMs < 9000, `${slowMs}ms`);
+    check("mock slow (35s) -> null via 30s timeout", slow === null && slowMs >= 29000 && slowMs < 34000, `${slowMs}ms`);
+
+    // 5b. A 10s-slow Kurier now SUCCEEDS (inside the 30s timeout).
+    mockMode = "slow10";
+    const t0b = Date.now();
+    const slow10 = await kurier.submitProof(vkHash, { pi_a: ["1"] }, ["1"]);
+    const slow10Ms = Date.now() - t0b;
+    check("mock slow (10s) -> jobId inside 30s timeout", slow10?.jobId === "job-test-1" && slow10Ms >= 9000 && slow10Ms < 20000, `${slow10Ms}ms`);
     mockMode = "ok";
   }
 

@@ -29,20 +29,22 @@
 //
 // SAFETY CONTRACT — Kurier must never be able to hurt a gatekeeper
 // answer, so this module NEVER THROWS and NEVER BLOCKS the response:
-//   * every fetch has a 5s AbortSignal timeout;
+//   * every fetch has a 30s AbortSignal timeout (measured 2026-11-16:
+//     Kurier's own register-vk takes ~19s even to reject a dummy key,
+//     so a 5s timeout guaranteed failure);
 //   * any failure (network error, timeout, non-2xx, bad JSON) returns
 //     null and is only logged — the caller keeps its original answer;
 //   * submission is fire-and-forget AFTER the response is sent
 //     (see submitProofFireAndForget + the server.js wiring);
-//   * job-status polling is bounded (60s max) and runs in the
+//   * job-status polling is bounded (180s max) and runs in the
 //     background only.
 import { config } from "./config.js";
 
 const PROOF_TYPE = "groth16";
 const PROOF_OPTIONS = { library: "snarkjs", curve: "bn128" };
-const FETCH_TIMEOUT_MS = 5000;
+const FETCH_TIMEOUT_MS = 30000;
 const POLL_INTERVAL_MS = 2000;
-const POLL_TIMEOUT_MS = 60000;
+const POLL_TIMEOUT_MS = 180000;
 
 export function kurierEnabled() {
   return Boolean(config.kurierApiKey);
@@ -157,30 +159,44 @@ export function getRegisteredVkHash() {
 
 // Register the vk once at startup (best-effort, background). Call it
 // without awaiting: a slow or failing Kurier must never delay the
-// server coming up. Returns the vkHash or null. Never throws.
+// server coming up. Retries up to 3 times: a single slow/failed
+// attempt must not leave the vk unregistered for the whole process
+// (an unregistered vk means no proof is ever submitted). Returns the
+// vkHash or null. Never throws.
 export async function ensureVkRegistered(vk) {
   if (!kurierEnabled()) return null;
   if (registeredVkHash) return registeredVkHash;
-  try {
-    registeredVkHash = await registerVerificationKey(vk);
-  } catch (e) {
-    // Defensive: registerVerificationKey never throws, but a Kurier
-    // failure must not be able to crash startup through this path.
-    log("error", "kurier ensureVkRegistered failed", { error: String(e.message || e) });
-    registeredVkHash = null;
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      registeredVkHash = await registerVerificationKey(vk);
+    } catch (e) {
+      // Defensive: registerVerificationKey never throws, but a Kurier
+      // failure must not be able to crash startup through this path.
+      log("error", "kurier ensureVkRegistered failed", { attempt, error: String(e.message || e) });
+      registeredVkHash = null;
+    }
+    if (registeredVkHash) break;
+    if (attempt < 3) await new Promise((r) => setTimeout(r, 2000));
   }
   if (registeredVkHash) log("info", "kurier vk registered", { vkHash: registeredVkHash });
+  else log("error", "kurier vk registration failed after retries");
   return registeredVkHash;
 }
 
 // Submit a proof in the background AFTER the response has been sent.
-// Fire-and-forget: the caller must NOT await this. It submits, then
-// polls to Finalized in the background, and never throws or mutates
-// anything the platform already received. If the vk was never
-// registered (or registration failed), the submit is skipped silently.
-export async function submitProofFireAndForget(vkHash, proof, publicSignals) {
+// Fire-and-forget: the caller must NOT await this. It ensures the vk
+// is registered first (retrying in the background if startup
+// registration failed — an unregistered vk would otherwise silently
+// skip every submission), then submits, then polls to Finalized in
+// the background, and never throws or mutates anything the platform
+// already received. The submit is skipped only if registration
+// ultimately fails.
+export async function submitProofFireAndForget(vk, proof, publicSignals) {
   try {
-    if (!kurierEnabled() || !vkHash || !proof) return null;
+    if (!kurierEnabled() || !proof) return null;
+    let vkHash = registeredVkHash;
+    if (!vkHash) vkHash = await ensureVkRegistered(vk);
+    if (!vkHash) return null;
     const out = await submitProof(vkHash, proof, publicSignals);
     if (!out) return null;
     log("info", "kurier proof submitted", { jobId: out.jobId, optimisticVerify: out.optimisticVerify });
