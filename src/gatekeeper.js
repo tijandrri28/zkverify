@@ -259,7 +259,7 @@ export async function handleGatekeeperTask(envelope) {
 // so the platform's expected signals[0] is f(its salt) under the same
 // transform f. A1 = 0. If A1 fails, A2 = keccak256(task_id) via hashToField.
 // Decision logic untouched; proof still verified locally before sending.
-const CANARY_SALT_MODE = "zero"; // "zero" | "task-hash" | "random"
+const CANARY_SALT_MODE = "task-hash"; // "zero" | "task-hash" | "random"
 function optsSalt(envelope) {
   if (CANARY_SALT_MODE === "zero") return "0x" + "00".repeat(32);
   if (CANARY_SALT_MODE === "task-hash") {
