@@ -325,10 +325,13 @@ the places named.
    `npm run test:steal`.
 7. **Kurier.** The proof-submission path via Kurier (register vk once,
    submit proofs by vk hash, poll to Finalized) is implemented as an
-   optional, env-gated module (`src/kurier.js`) but its exact REST
-   endpoints are **not confirmed** against Kurier's own docs. Leave
-   `KURIER_API_KEY` unset until they are confirmed; proofs are returned
-   in the response meanwhile.
+   optional, env-gated module (`src/kurier.js`); its REST endpoints
+   are confirmed against Kurier's own docs (api.kurier.xyz/api/v1,
+   key in the URL path). Leave `KURIER_API_KEY` unset until after the
+   tournament — enabling it needs a redeploy, and a restart
+   mid-tournament can time out a task. Proofs are returned in the
+   response meanwhile; Kurier submission is fire-and-forget after the
+   response is sent and can never change an answer.
 
 ## Still needed before registration
 
@@ -342,7 +345,7 @@ the places named.
 - [ ] Register the Steal the VFY strategy commitment before Swiss Round 1.
 - [ ] Resolve practice-mode confirmations 1–7 above.
 - [ ] Kurier API key only if the on-chain submission path is wanted
-      (optional; endpoints unconfirmed).
+      (optional; enable only after the tournament — needs a redeploy).
 
 ## Security notes
 

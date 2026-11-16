@@ -15,11 +15,17 @@
 // raw response body. The server refuses to start without the HMAC
 // secret (see src/config.js).
 import http from "node:http";
+import fs from "node:fs";
 import { config, hmacSecretBytes } from "./src/config.js";
 import { SIGNATURE_HEADER, signBody, verifySignature } from "./src/hmac.js";
 import { handleGatekeeperTask } from "./src/gatekeeper.js";
 import { handleStealTurn } from "./src/steal.js";
-import { kurierEnabled } from "./src/kurier.js";
+import {
+  kurierEnabled,
+  ensureVkRegistered,
+  getRegisteredVkHash,
+  submitProofFireAndForget,
+} from "./src/kurier.js";
 
 const SECRET = hmacSecretBytes();
 
@@ -99,7 +105,15 @@ async function handlePost(req, res, path) {
         proof: result.proof ? "attached" : "null",
         ms: Date.now() - started,
       });
-      return sendSigned(res, 200, result);
+      sendSigned(res, 200, result);
+      // Kurier (optional audit trail): fire-and-forget AFTER the response
+      // is sent, never awaited, never mutating the response. If Kurier
+      // is down, slow, or unregistered, nothing here changes the answer
+      // the platform already received.
+      if (result.proof && getRegisteredVkHash()) {
+        submitProofFireAndForget(getRegisteredVkHash(), result.proof, result.public_signals);
+      }
+      return;
     } catch (e) {
       // Never let a handler exception become a timeout: fail closed.
       log("error", "gatekeeper handler error", { error: String(e.message || e) });
@@ -176,6 +190,17 @@ server.listen(config.port, config.host, () => {
     strategy: config.strategyName,
     kurier: kurierEnabled(),
   });
+  // Kurier (optional): register the gatekeeper vk once, in the
+  // background, without awaiting — a slow or failing Kurier must never
+  // delay the server coming up or affect any answer.
+  if (kurierEnabled()) {
+    try {
+      const vk = JSON.parse(fs.readFileSync("circuits/gatekeeper_vk.json", "utf8"));
+      ensureVkRegistered(vk);
+    } catch (e) {
+      log("error", "kurier startup registration skipped", { error: String(e.message || e) });
+    }
+  }
 });
 
 // Graceful shutdown (Railway sends SIGTERM on redeploy).

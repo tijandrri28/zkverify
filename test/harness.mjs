@@ -14,7 +14,7 @@ const SECRET = crypto.randomBytes(32).toString("hex");
 const BASE = `http://127.0.0.1:${PORT}`;
 
 function sign(body) {
-  return crypto.createHmac("sha256", Buffer.from(SECRET, "hex")).update(body).digest("hex");
+  return crypto.createHmac("sha256", Buffer.from(SECRET, "utf8")).update(body).digest("hex");
 }
 
 async function post(path, obj, secret = SECRET) {
@@ -23,7 +23,7 @@ async function post(path, obj, secret = SECRET) {
     method: "POST",
     headers: {
       "content-type": "application/json",
-      "x-agent-games-signature": crypto.createHmac("sha256", Buffer.from(secret, "hex")).update(body).digest("hex"),
+      "x-agent-games-signature": crypto.createHmac("sha256", Buffer.from(secret, "utf8")).update(body).digest("hex"),
     },
     body,
   });
@@ -32,7 +32,7 @@ async function post(path, obj, secret = SECRET) {
 }
 
 function verifyResponseSignature(body, sig) {
-  const expected = crypto.createHmac("sha256", Buffer.from(SECRET, "hex")).update(body).digest("hex");
+  const expected = crypto.createHmac("sha256", Buffer.from(SECRET, "utf8")).update(body).digest("hex");
   return sig === expected;
 }
 
