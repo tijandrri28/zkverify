@@ -248,9 +248,24 @@ export async function handleGatekeeperTask(envelope) {
   };
 }
 
+// CANARY A (2026-11-16, R04) — deterministic salt.
+// The live verifier may recompute the expected public signals (the Steal
+// spec says the platform recomputes hashes from game state it knows). A
+// random salt can never match a recomputed value, so the salt must be
+// deterministic. NOTE (measured 2026-11-16): public_signals[0] is NOT the
+// raw salt — the circuit transforms it deterministically (salt 0 ->
+// 7608019542272087659831189020126868494284883966215204818278677573659135050672;
+// salt 1 -> 3416305358980223057311285626285120063997304547666749842288853657018704255599),
+// so the platform's expected signals[0] is f(its salt) under the same
+// transform f. A1 = 0. If A1 fails, A2 = keccak256(task_id) via hashToField.
+// Decision logic untouched; proof still verified locally before sending.
+const CANARY_SALT_MODE = "zero"; // "zero" | "task-hash" | "random"
 function optsSalt(envelope) {
-  // Deterministic salt per task keeps the proof reproducible for a given
-  // task while still unique across tasks; a fresh random salt is equally
-  // valid. Random is simpler and avoids any cross-task linkage.
-  return undefined;
+  if (CANARY_SALT_MODE === "zero") return "0x" + "00".repeat(32);
+  if (CANARY_SALT_MODE === "task-hash") {
+    const taskId =
+      envelope.task_id ?? envelope.taskId ?? envelope.input?.task_id ?? "";
+    return hashToField(taskId);
+  }
+  return undefined; // random (pre-canary behaviour)
 }
