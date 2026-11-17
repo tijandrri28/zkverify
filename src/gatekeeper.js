@@ -202,6 +202,8 @@ export async function handleGatekeeperTask(envelope) {
   const input = envelope.input ?? envelope;
   const taskId = envelope.task_id ?? envelope.taskId ?? input.task_id ?? "unknown";
   const proofTx = input.proof_tx ?? "";
+  // BUG FIX (2026-11-18): the platform envelope carries task_id at the TOP level; it is NOT inside `input`. buildCircuitInput reads input.task_id, so every real task hashed the EMPTY STRING into public_signals[12] instead of keccak256(task_id). Merge the authoritative envelope task_id into the input used for proving.
+  const proofInput = taskId === "unknown" ? input : { ...input, task_id: taskId };
 
   let decision, reasonCode;
   try {
@@ -227,7 +229,7 @@ export async function handleGatekeeperTask(envelope) {
   let publicSignals = null;
   let proofError = null;
   try {
-    ({ proof, publicSignals } = await generateProof(input, decision, {
+    ({ proof, publicSignals } = await generateProof(proofInput, decision, {
       saltHex: optsSalt(envelope),
     }));
   } catch (e) {
