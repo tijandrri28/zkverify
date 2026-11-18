@@ -28,6 +28,7 @@ import { config } from "./config.js";
 import {
   field,
   hashToField,
+  rawBytesToField,
   addressToField,
   nonNegativeIntToField,
 } from "./fields.js";
@@ -165,7 +166,12 @@ export function buildCircuitInput(input, decision, saltHex) {
     amount: nonNegativeIntToField(input.amount, "amount"),
     maxTransfer: nonNegativeIntToField(input.max_transfer, "max_transfer"),
     decision: decision === "APPROVE" ? "1" : "0",
-    taskId: hashToField(input.task_id ?? input.taskId ?? ""),
+    // CANARY C (2026-11-18): taskId as raw UTF-8 bytes (see
+    // rawBytesToField in src/fields.js). The keccak256 encoding (72df3d8
+    // fix) is live but the verified-proofs counter stayed 0, so the
+    // platform's expected signals[12] may come from the raw bytes
+    // instead. Salt (canary A2) is untouched and still uses hashToField.
+    taskId: rawBytesToField(input.task_id ?? input.taskId ?? ""),
     salt: field(saltHex ?? "0x" + crypto.randomBytes(32).toString("hex")),
   };
 }

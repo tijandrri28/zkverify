@@ -25,6 +25,17 @@ export function hashToField(s) {
   return field(BigInt(ethers.keccak256(ethers.toUtf8Bytes(String(s)))));
 }
 
+// CANARY C (2026-11-18) — taskId as raw UTF-8 bytes.
+// Hypothesis: the platform may compute its expected public_signals[12]
+// from the raw task_id bytes (big-endian BigInt), not from keccak256.
+// Used ONLY for taskId in buildCircuitInput; the salt (canary A2) still
+// uses hashToField. Reversible: switch the one call site back.
+export function rawBytesToField(s) {
+  const hex = Buffer.from(String(s), "utf8").toString("hex");
+  if (hex === "") return "0";
+  return field(BigInt("0x" + hex));
+}
+
 export function addressToField(addr) {
   if (typeof addr !== "string" || !/^0x[0-9a-fA-F]{40}$/.test(addr)) {
     throw new Error(`Invalid Ethereum address: ${addr}`);
