@@ -15,23 +15,12 @@
 // raw response body. The server refuses to start without the HMAC
 // secret (see src/config.js).
 import http from "node:http";
-import fs from "node:fs";
 import { config, hmacSecretBytes } from "./src/config.js";
 import { SIGNATURE_HEADER, signBody, verifySignature } from "./src/hmac.js";
 import { handleGatekeeperTask } from "./src/gatekeeper.js";
 import { handleStealTurn } from "./src/steal.js";
-import {
-  kurierEnabled,
-  ensureVkRegistered,
-  submitProofFireAndForget,
-} from "./src/kurier.js";
 
 const SECRET = hmacSecretBytes();
-
-// Gatekeeper verification key (loaded at startup from
-// circuits/gatekeeper_vk.json); passed to the Kurier submit path so a
-// failed startup registration can be retried per task. Null until loaded.
-let gatekeeperVk = null;
 
 function log(level, msg, extra) {
   const line = { t: new Date().toISOString(), level, msg, ...(extra ?? {}) };
@@ -110,14 +99,8 @@ async function handlePost(req, res, path) {
         ms: Date.now() - started,
       });
       sendSigned(res, 200, result);
-      // Kurier (optional audit trail): fire-and-forget AFTER the response
-      // is sent, never awaited, never mutating the response. If Kurier
-      // is down, slow, or unregistered, nothing here changes the answer
-      // the platform already received. submitProofFireAndForget retries
-      // vk registration in the background if startup registration failed.
-      if (result.proof) {
-        submitProofFireAndForget(gatekeeperVk, result.proof, result.public_signals);
-      }
+      // Proof travels in the response only; the platform verifies it
+      // offline. (Kurier submission was removed 2026-11-19.)
       return;
     } catch (e) {
       // Never let a handler exception become a timeout: fail closed.
@@ -177,7 +160,6 @@ const server = http.createServer(async (req, res) => {
       agent: config.agentName,
       tracks: ["proof-gatekeeper", "steal-the-vfy"],
       strategy: config.strategyName,
-      kurier: kurierEnabled(),
       time: new Date().toISOString(),
     });
   }
@@ -193,20 +175,7 @@ server.listen(config.port, config.host, () => {
     port: config.port,
     agent: config.agentName,
     strategy: config.strategyName,
-    kurier: kurierEnabled(),
   });
-  // Kurier (optional): register the gatekeeper vk once, in the
-  // background, without awaiting — a slow or failing Kurier must never
-  // delay the server coming up or affect any answer.
-  if (kurierEnabled()) {
-    try {
-      const vk = JSON.parse(fs.readFileSync("circuits/gatekeeper_vk.json", "utf8"));
-      gatekeeperVk = vk;
-      ensureVkRegistered(vk);
-    } catch (e) {
-      log("error", "kurier startup registration skipped", { error: String(e.message || e) });
-    }
-  }
 });
 
 // Graceful shutdown (Railway sends SIGTERM on redeploy).

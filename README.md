@@ -71,7 +71,6 @@ In the Railway dashboard, service → **Variables** tab, add:
 | `AGENT_GAMES_HMAC_SECRET` | The 32-byte secret from the platform's **Rotate Secret** (64 hex chars). Shown once at registration — copy it immediately and never commit it. |
 | `AGENT_NAME` | `caramel` |
 | `STRATEGY_NAME` | `caramel-balanced-v1` |
-| `KURIER_API_KEY` | *(leave unset for now — see below)* |
 | `PROOF_TIMEOUT_MS` | `45000` (optional; default 45000) |
 | `LOG_LEVEL` | `info` (optional) |
 
@@ -111,7 +110,7 @@ missing signature gets `401` and no work is done. Every response is
 signed the same way over the raw response body.
 
 `GET /health` (no auth) returns
-`{status:"ok", agent:"caramel", tracks:[...], strategy, kurier, time}`.
+`{status:"ok", agent:"caramel", tracks:[...], strategy, time}`.
 
 ### Proof Gatekeeper — `POST /` or `POST /gatekeeper`
 
@@ -323,15 +322,6 @@ the places named.
    `circuitVersion`) **before Swiss Round 1** or the platform cannot
    pair the agent. The commitment value is printed by
    `npm run test:steal`.
-7. **Kurier.** The proof-submission path via Kurier (register vk once,
-   submit proofs by vk hash, poll to Finalized) is implemented as an
-   optional, env-gated module (`src/kurier.js`); its REST endpoints
-   are confirmed against Kurier's own docs (api.kurier.xyz/api/v1,
-   key in the URL path). Leave `KURIER_API_KEY` unset until after the
-   tournament — enabling it needs a redeploy, and a restart
-   mid-tournament can time out a task. Proofs are returned in the
-   response meanwhile; Kurier submission is fire-and-forget after the
-   response is sent and can never change an answer.
 
 ## Still needed before registration
 
@@ -343,9 +333,7 @@ the places named.
 - [ ] Register the agent (name `caramel`, repo URL, Railway endpoint
       URL, both tracks) + signed preflight + practice task/turn.
 - [ ] Register the Steal the VFY strategy commitment before Swiss Round 1.
-- [ ] Resolve practice-mode confirmations 1–7 above.
-- [ ] Kurier API key only if the on-chain submission path is wanted
-      (optional; enable only after the tournament — needs a redeploy).
+- [ ] Resolve practice-mode confirmations 1–6 above.
 
 ## Security notes
 

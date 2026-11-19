@@ -29,11 +29,6 @@ export const config = {
   // stored as 64 hex chars (with or without a 0x prefix). NEVER commit it.
   hmacSecretHex: required("AGENT_GAMES_HMAC_SECRET"),
 
-  // Optional: Kurier API key for submitting proofs to zkVerify on-chain.
-  // When unset, proofs are returned in the response only (no Kurier call).
-  kurierApiKey: optional("KURIER_API_KEY", ""),
-  kurierBaseUrl: optional("KURIER_BASE_URL", "https://api.kurier.xyz/api/v1"),
-
   // Strategy identity for Steal the VFY.
   strategyName: optional("STRATEGY_NAME", "caramel-balanced-v1"),
 
