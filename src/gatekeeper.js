@@ -28,7 +28,6 @@ import { config } from "./config.js";
 import {
   field,
   hashToField,
-  rawBytesToField,
   addressToField,
   nonNegativeIntToField,
 } from "./fields.js";
@@ -166,12 +165,21 @@ export function buildCircuitInput(input, decision, saltHex) {
     amount: nonNegativeIntToField(input.amount, "amount"),
     maxTransfer: nonNegativeIntToField(input.max_transfer, "max_transfer"),
     decision: decision === "APPROVE" ? "1" : "0",
-    // CANARY C (2026-11-18): taskId as raw UTF-8 bytes (see
-    // rawBytesToField in src/fields.js). The keccak256 encoding (72df3d8
-    // fix) is live but the verified-proofs counter stayed 0, so the
-    // platform's expected signals[12] may come from the raw bytes
-    // instead. Salt (canary A2) is untouched and still uses hashToField.
-    taskId: rawBytesToField(input.task_id ?? input.taskId ?? ""),
+    // R08 FIX (2026-11-20, measured with tools/probe-salt-f.mjs):
+    // publicSignals[0] = Poseidon([salt, taskId]) — salt FIRST, taskId
+    // second, PROVEN by exact match on two controlled proofs
+    // (Poseidon([0, keccak("gk_24_9d1")]) == f(0),
+    //  Poseidon([1, keccak("gk_24_9d1")]) == f(1)).
+    // So signals[0] binds BOTH encodings: salt and taskId MUST use the
+    // SAME encoding of task_id, or signals[0] can never match what the
+    // platform recomputes. History shows every live round was MIXED:
+    //   - before 2026-11-18: salt = keccak(real id), taskId = keccak("")
+    //     (envelope task_id bug) -> Poseidon(keccak(real), keccak("")).
+    //   - R07 (canary C): salt = keccak(real id), taskId = rawBytes(real)
+    //     -> Poseidon(keccak, rawBytes).
+    // keccak+keccak was NEVER cleanly tested — this reverts canary C.
+    // Salt (canary A2) stays hashToField(task_id).
+    taskId: hashToField(input.task_id ?? input.taskId ?? ""),
     salt: field(saltHex ?? "0x" + crypto.randomBytes(32).toString("hex")),
   };
 }

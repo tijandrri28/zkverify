@@ -160,6 +160,14 @@ const server = http.createServer(async (req, res) => {
       agent: config.agentName,
       tracks: ["proof-gatekeeper", "steal-the-vfy"],
       strategy: config.strategyName,
+      // Deploy marker (R08 fix, 2026-11-20): Railway injects
+      // RAILWAY_GIT_COMMIT_SHA for GitHub-connected deploys. The `fix`
+      // label identifies this build even if the SHA env is absent.
+      build_commit:
+        process.env.RAILWAY_GIT_COMMIT_SHA ||
+        process.env.BUILD_COMMIT ||
+        "unknown",
+      fix: "r08-taskid-keccak-consistent-poseidon",
       time: new Date().toISOString(),
     });
   }
